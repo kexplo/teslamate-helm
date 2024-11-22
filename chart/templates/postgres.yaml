@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teslamate.fullname" . }}-postgres
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "teslamate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      {{- with .Values.postgres.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "teslamate.labels" . | nindent 8 }}
+        {{- with .Values.postgres.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: database
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.postgres.podSecurityContext | nindent 8 }}
+      containers:
+      - name: database
+        securityContext:
+          {{- toYaml .Values.postgres.securityContext | nindent 10 }}
+        image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_user
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_pass
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_name
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: db-data
+      volumes:
+      - name: db-data
+        {{- if .Values.postgres.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- toYaml .Values.postgres.persistence.persistentVolumeClaim | nindent 10 }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- with .Values.postgres.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgres.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgres.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgres.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "teslamate.fullname" . }}-postgres
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    {{- include "teslamate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: database

@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teslamate.fullname" . }}-teslamate
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: teslamate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "teslamate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: teslamate
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "teslamate.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: teslamate
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: teslamate
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        ports:
+        - containerPort: 4000
+        env:
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: secretkey
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_user
+        - name: DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_pass
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_name
+        - name: DATABASE_HOST
+          value: "{{ include "teslamate.fullname" . }}-postgres"
+        - name: MQTT_HOST
+          value: "{{ include "teslamate.fullname" . }}-mosquitto"
+      #   volumeMounts:
+      #   - mountPath: /opt/app/import
+      #     name: import-volume
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "teslamate.fullname" . }}-teslamate
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: teslamate
+spec:
+  type: {{ .Values.services.teslamate.type }}
+  ports:
+    - port: {{ .Values.services.teslamate.port }}
+      targetPort: 4000
+      protocol: TCP
+  selector:
+    {{- include "teslamate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: teslamate

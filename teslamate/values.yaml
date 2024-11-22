@@ -40,7 +40,9 @@ postgres:
     pullPolicy: IfNotPresent
   podAnnotations: {}
   podLabels: {}
-  podSecurityContext: {}
+  podSecurityContext:
+    fsGroup: 999  # default postgres UID (not alpine)
+    fsGroupChangePolicy: "OnRootMismatch"
   securityContext: {}
   resources: {}
   nodeSelector: {}
@@ -58,7 +60,9 @@ grafana:
     pullPolicy: Always
   podAnnotations: {}
   podLabels: {}
-  podSecurityContext: {}
+  podSecurityContext:
+    fsGroup: 472  # default GF_UID
+    fsGroupChangePolicy: "OnRootMismatch"
   securityContext: {}
   resources: {}
   nodeSelector: {}

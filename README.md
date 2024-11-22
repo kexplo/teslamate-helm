@@ -15,5 +15,5 @@ helm repo add teslamate https://kexplo.github.io/teslamate-helm/
 Install the chart:
 
 ```bash
-helm install teslamate teslamate-helm/teslamate -n teslamate -f your-values.yaml
+helm install teslamate teslamate/teslamate -n teslamate -f your-values.yaml
 ```

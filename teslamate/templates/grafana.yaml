@@ -34,7 +34,7 @@ spec:
       - name: grafana
         securityContext:
           {{- toYaml .Values.grafana.securityContext | nindent 10 }}
-        image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}"
+        image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag | default .Chart.AppVersion }}"
         env:
         - name: DATABASE_USER
           valueFrom:

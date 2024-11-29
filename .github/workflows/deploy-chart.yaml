@@ -21,9 +21,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./
-      - name: Deploy chart
-        run: |
-          helm upgrade --install my-release ./my-chart
 
 permissions:
   contents: write

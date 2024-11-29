@@ -24,3 +24,6 @@ jobs:
       - name: Deploy chart
         run: |
           helm upgrade --install my-release ./my-chart
+
+permissions:
+  contents: write

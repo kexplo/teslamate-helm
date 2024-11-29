@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teslamate.fullname" . }}-mosquitto
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mqtt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "teslamate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: mqtt
+  template:
+    metadata:
+      {{- with .Values.mosquitto.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "teslamate.labels" . | nindent 8 }}
+        {{- with .Values.mosquitto.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: mqtt
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.mosquitto.podSecurityContext | nindent 8 }}
+      containers:
+      - name: mosquitto
+        securityContext:
+          {{- toYaml .Values.mosquitto.securityContext | nindent 10 }}
+        image: "{{ .Values.mosquitto.image.repository }}:{{ .Values.mosquitto.image.tag }}"
+        args: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+        volumeMounts:
+        - mountPath: /mosquitto/data
+          name: mosquitto-data
+        ports:
+        - containerPort: 1883
+      volumes:
+      - name: mosquitto-data
+        {{- if .Values.mosquitto.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- toYaml .Values.mosquitto.persistence.persistentVolumeClaim | nindent 10 }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- with .Values.mosquitto.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mosquitto.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mosquitto.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mosquitto.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "teslamate.fullname" . }}-mosquitto
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mqtt
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1883
+      targetPort: 1883
+      protocol: TCP
+  selector:
+    {{- include "teslamate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: mqtt

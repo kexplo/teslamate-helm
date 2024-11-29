@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "teslamate.fullname" . }}-grafana
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "teslamate.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: grafana
+  template:
+    metadata:
+      {{- with .Values.grafana.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "teslamate.labels" . | nindent 8 }}
+        {{- with .Values.grafana.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/component: grafana
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.grafana.podSecurityContext | nindent 8 }}
+      containers:
+      - name: grafana
+        securityContext:
+          {{- toYaml .Values.grafana.securityContext | nindent 10 }}
+        image: "{{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag | default .Chart.AppVersion }}"
+        env:
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_user
+        - name: DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_pass
+        - name: DATABASE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: "{{ include "teslamate.fullname" . }}-teslamate"
+              key: database_name
+        - name: DATABASE_HOST
+          value: "{{ include "teslamate.fullname" . }}-postgres"
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - mountPath: /var/lib/grafana
+          name: grafana-data
+      volumes:
+      - name: grafana-data
+        {{- if .Values.grafana.persistence.enabled }}
+        persistentVolumeClaim:
+          {{- toYaml .Values.grafana.persistence.persistentVolumeClaim | nindent 10 }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- with .Values.grafana.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grafana.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grafana.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.grafana.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "teslamate.fullname" . }}-grafana
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  type: {{ .Values.services.grafana.type }}
+  ports:
+    - port: {{ .Values.services.grafana.port }}
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    {{- include "teslamate.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana

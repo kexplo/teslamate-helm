@@ -1,0 +1,100 @@
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# secret values
+secretkey: "REPLACE_WITH_A_SECURE_KEY"
+database_user: "teslamate"
+database_pass: "REPLACE_WITH_A_SECURE_PASSWORD"
+database_name: "teslamate"
+
+image:
+  repository: teslamate/teslamate
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+postgres:
+  image:
+    repository: postgres
+    tag: 17
+    pullPolicy: IfNotPresent
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    fsGroup: 999  # default postgres UID (not alpine)
+    fsGroupChangePolicy: "OnRootMismatch"
+  securityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  persistence:
+    enabled: false
+    persistentVolumeClaim:
+      claimName: ""
+
+grafana:
+  image:
+    repository: teslamate/grafana
+    tag: latest
+    pullPolicy: Always
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext:
+    fsGroup: 472  # default GF_UID
+    fsGroupChangePolicy: "OnRootMismatch"
+  securityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  persistence:
+    enabled: false
+    persistentVolumeClaim:
+      claimName: ""
+
+mosquitto:
+  image:
+    repository: eclipse-mosquitto
+    tag: 2
+    pullPolicy: IfNotPresent
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  persistence:
+    enabled: false
+    persistentVolumeClaim:
+      claimName: ""
+
+services:
+  teslamate:
+    type: ClusterIP
+    port: 4000
+  grafana:
+    type: ClusterIP
+    port: 3000

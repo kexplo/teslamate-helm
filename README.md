@@ -17,3 +17,7 @@ Install the chart:
 ```bash
 helm install teslamate teslamate/teslamate -n teslamate -f your-values.yaml
 ```
+
+## Documentation
+
+- [teslamate](https://kexplo.github.io/teslamate-helm/teslamate)

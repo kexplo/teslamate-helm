@@ -36,7 +36,17 @@ spec:
           {{- toYaml .Values.securityContext | nindent 10 }}
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         ports:
-        - containerPort: 4000
+        - name: http
+          containerPort: 4000
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health_check
+            port: http
+        readinessProbe:
+          httpGet:
+            path: /health_check
+            port: http
         env:
         - name: ENCRYPTION_KEY
           valueFrom:

@@ -98,3 +98,33 @@ services:
   grafana:
     type: ClusterIP
     port: 3000
+
+backup:
+  # Enable database backup to Google Drive
+  enabled: false
+  # Cron schedule for backup (default: daily at 2 AM)
+  schedule: "0 2 * * *"
+  # Image used for backup job
+  image:
+    repository: postgres
+    tag: 17
+    pullPolicy: IfNotPresent
+  # Google Drive configuration
+  googleDrive:
+    # Google Drive folder ID where backups will be uploaded
+    # You can get this from the folder URL: https://drive.google.com/drive/folders/FOLDER_ID
+    folderId: ""
+    # Name of the Kubernetes secret containing Google Drive credentials
+    # The secret should contain a key 'credentials.json' with service account credentials
+    credentialsSecretName: "teslamate-gdrive-credentials"
+  # Resource limits for backup job
+  resources: {}
+    # limits:
+    #   cpu: 100m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 128Mi
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}

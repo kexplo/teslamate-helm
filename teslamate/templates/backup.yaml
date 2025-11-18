@@ -1,0 +1,188 @@
+{{- if .Values.backup.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "teslamate.fullname" . }}-backup-script
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "Starting PostgreSQL backup at $(date)"
+
+    # Configuration
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="teslamate_backup_${TIMESTAMP}.sql.gz"
+    GDRIVE_FOLDER_ID="${GDRIVE_FOLDER_ID}"
+
+    # PostgreSQL connection info from environment variables
+    export PGHOST="{{ include "teslamate.fullname" . }}-postgres"
+    export PGPORT="5432"
+    export PGUSER="${POSTGRES_USER}"
+    export PGPASSWORD="${POSTGRES_PASSWORD}"
+    export PGDATABASE="${POSTGRES_DB}"
+
+    echo "Creating database dump..."
+    pg_dump -Fc -v -f "/tmp/${BACKUP_FILE%.gz}" || {
+      echo "Error: pg_dump failed"
+      exit 1
+    }
+
+    echo "Compressing backup..."
+    gzip "/tmp/${BACKUP_FILE%.gz}"
+
+    echo "Installing Python dependencies..."
+    pip3 install --quiet --no-cache-dir google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+
+    echo "Uploading to Google Drive..."
+    python3 /scripts/gdrive_upload.py "/tmp/${BACKUP_FILE}" "${GDRIVE_FOLDER_ID}"
+
+    echo "Cleaning up local backup file..."
+    rm -f "/tmp/${BACKUP_FILE}"
+
+    echo "Backup completed successfully at $(date)"
+
+  gdrive_upload.py: |
+    #!/usr/bin/env python3
+    import os
+    import sys
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    def upload_to_drive(file_path, folder_id):
+        """Upload file to Google Drive."""
+
+        # Load credentials from the mounted secret
+        SCOPES = ['https://www.googleapis.com/auth/drive.file']
+        credentials = service_account.Credentials.from_service_account_file(
+            '/secrets/gdrive/credentials.json',
+            scopes=SCOPES
+        )
+
+        # Build the Drive API service
+        service = build('drive', 'v3', credentials=credentials)
+
+        # Upload the backup file
+        file_name = os.path.basename(file_path)
+        file_metadata = {
+            'name': file_name,
+            'parents': [folder_id]
+        }
+
+        media = MediaFileUpload(file_path, resumable=True)
+
+        print(f"Uploading {file_name} to Google Drive folder {folder_id}...")
+        file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id,name,createdTime'
+        ).execute()
+
+        print(f"Upload successful! File ID: {file.get('id')}")
+
+    if __name__ == '__main__':
+        if len(sys.argv) != 3:
+            print("Usage: gdrive_upload.py <file_path> <folder_id>")
+            sys.exit(1)
+
+        file_path = sys.argv[1]
+        folder_id = sys.argv[2]
+
+        if not os.path.exists(file_path):
+            print(f"Error: File not found: {file_path}")
+            sys.exit(1)
+
+        try:
+            upload_to_drive(file_path, folder_id)
+        except Exception as e:
+            print(f"Error during upload: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "teslamate.fullname" . }}-backup
+  labels:
+    {{- include "teslamate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "teslamate.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+            imagePullPolicy: {{ .Values.backup.image.pullPolicy }}
+            command:
+            - /bin/bash
+            - /scripts/backup.sh
+            env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "teslamate.fullname" . }}-teslamate"
+                  key: database_user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "teslamate.fullname" . }}-teslamate"
+                  key: database_pass
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ include "teslamate.fullname" . }}-teslamate"
+                  key: database_name
+            - name: GDRIVE_FOLDER_ID
+              value: {{ .Values.backup.googleDrive.folderId | quote }}
+            volumeMounts:
+            - name: backup-script
+              mountPath: /scripts
+            - name: gdrive-credentials
+              mountPath: /secrets/gdrive
+              readOnly: true
+            {{- with .Values.backup.resources }}
+            resources:
+              {{- toYaml . | nindent 14 }}
+            {{- end }}
+          volumes:
+          - name: backup-script
+            configMap:
+              name: {{ include "teslamate.fullname" . }}-backup-script
+              defaultMode: 0755
+          - name: gdrive-credentials
+            secret:
+              secretName: {{ .Values.backup.googleDrive.credentialsSecretName }}
+          {{- with .Values.backup.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.backup.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

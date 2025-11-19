@@ -106,8 +106,8 @@ backup:
   schedule: "0 2 * * *"
   # Image used for backup job
   image:
-    repository: postgres
-    tag: 17
+    repository: python
+    tag: 3.12-slim
     pullPolicy: IfNotPresent
   # Google Drive configuration
   googleDrive:

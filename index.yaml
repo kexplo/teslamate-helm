@@ -3,12 +3,12 @@ entries:
   teslamate:
   - apiVersion: v2
     appVersion: 1.33.0
-    created: "2025-11-19T04:18:10.163188379Z"
+    created: "2025-11-19T04:26:06.650984477Z"
     description: A Helm chart for teslamate
-    digest: 4bcb4df8c9e4141119e2025158bbaa3fcbb430ff3c106f36da2df2e88ea85729
+    digest: 57bac1d07239fa6d4b7762a363234e0e189c045dd3d10f5520c628ad11d75e19
     name: teslamate
     type: application
     urls:
     - teslamate-0.1.0.tgz
     version: 0.1.0
-generated: "2025-11-19T04:18:10.16231254Z"
+generated: "2025-11-19T04:26:06.650163941Z"

@@ -55,15 +55,28 @@ This chart supports automatic database backups to Google Drive using a CronJob.
          )
 
          # Try to run local server first (for environments with a browser)
-         # If it fails, fall back to console-based authentication
+         # If it fails, fall back to manual authentication
          try:
              print("Attempting to open browser for authentication...")
              creds = flow.run_local_server(port=0)
          except Exception as e:
              print(f"Browser authentication failed: {e}")
              print("\nFalling back to manual authentication...")
-             print("Please visit the URL below in a browser on any device:\n")
-             creds = flow.run_console()
+
+             # Generate authorization URL
+             auth_url, _ = flow.authorization_url(prompt='consent')
+
+             print("\nPlease visit this URL in a browser on any device:")
+             print(f"\n{auth_url}\n")
+             print("After authorization, you will be redirected to a URL.")
+             print("Copy the ENTIRE redirect URL from your browser's address bar and paste it here.")
+
+             # Get the authorization response URL from user
+             code = input("\nPaste the full redirect URL here: ").strip()
+
+             # Extract and exchange the authorization code for credentials
+             flow.fetch_token(authorization_response=code)
+             creds = flow.credentials
 
          # Save token
          token_data = {
@@ -88,7 +101,7 @@ This chart supports automatic database backups to Google Drive using a CronJob.
      python3 generate_token.py
      ```
      - **With browser**: The script will automatically open a browser window for authentication
-     - **Without browser (headless)**: The script will display a URL. Copy the URL, open it in a browser on another device, complete the authentication, and paste the authorization code back into the terminal
+     - **Without browser (headless)**: The script will display a URL. Copy the URL, open it in a browser on another device, complete the authentication, and paste the full redirect URL back into the terminal
    - This will create a `token.json` file with your OAuth2 credentials
 
 3. **Create Google Drive Folder**

@@ -10,18 +10,43 @@ metadata:
 data:
   backup.sh: |
     #!/bin/bash
-    set -e
+
+    # Log file for capturing errors
+    LOG_FILE="/tmp/backup_log.txt"
+    exec > >(tee -a "${LOG_FILE}") 2>&1
+
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="teslamate_backup_${TIMESTAMP}.sql.gz"
+    START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Function to send Discord notification
+    send_discord_notification() {
+      local success=$1
+      local message=$2
+      local error_log=$3
+
+      if [ "${WEBHOOK_ENABLED}" != "true" ] || [ -z "${DISCORD_WEBHOOK_URL}" ]; then
+        return 0
+      fi
+
+      python3 /scripts/discord_notify.py "${success}" "${message}" "${error_log}" "${BACKUP_FILE}" "${START_TIME}"
+    }
 
     echo "Starting PostgreSQL backup at $(date)"
 
     # Install PostgreSQL client and required system packages
     echo "Installing PostgreSQL client..."
-    apt-get update -qq
-    apt-get install -y -qq postgresql-client gzip
+    if ! apt-get update -qq; then
+      send_discord_notification "false" "Failed to update package lists" "${LOG_FILE}"
+      exit 1
+    fi
+
+    if ! apt-get install -y -qq postgresql-client gzip curl; then
+      send_discord_notification "false" "Failed to install required packages" "${LOG_FILE}"
+      exit 1
+    fi
 
     # Configuration
-    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    BACKUP_FILE="teslamate_backup_${TIMESTAMP}.sql.gz"
     GDRIVE_FOLDER_ID="${GDRIVE_FOLDER_ID}"
 
     # PostgreSQL connection info from environment variables
@@ -32,24 +57,40 @@ data:
     export PGDATABASE="${POSTGRES_DB}"
 
     echo "Creating database dump..."
-    pg_dump -Fc -v -f "/tmp/${BACKUP_FILE%.gz}" || {
-      echo "Error: pg_dump failed"
+    if ! pg_dump -Fc -v -f "/tmp/${BACKUP_FILE%.gz}"; then
+      send_discord_notification "false" "PostgreSQL dump failed" "${LOG_FILE}"
       exit 1
-    }
+    fi
 
     echo "Compressing backup..."
-    gzip "/tmp/${BACKUP_FILE%.gz}"
+    if ! gzip "/tmp/${BACKUP_FILE%.gz}"; then
+      send_discord_notification "false" "Backup compression failed" "${LOG_FILE}"
+      exit 1
+    fi
+
+    # Get backup file size
+    BACKUP_SIZE=$(du -h "/tmp/${BACKUP_FILE}" | cut -f1)
+    echo "Backup file size: ${BACKUP_SIZE}"
 
     echo "Installing Python dependencies..."
-    pip3 install --quiet --no-cache-dir google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
+    if ! pip3 install --quiet --no-cache-dir google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client requests; then
+      send_discord_notification "false" "Failed to install Python dependencies" "${LOG_FILE}"
+      exit 1
+    fi
 
     echo "Uploading to Google Drive..."
-    python3 /scripts/gdrive_upload.py "/tmp/${BACKUP_FILE}" "${GDRIVE_FOLDER_ID}"
+    if ! python3 /scripts/gdrive_upload.py "/tmp/${BACKUP_FILE}" "${GDRIVE_FOLDER_ID}"; then
+      send_discord_notification "false" "Google Drive upload failed" "${LOG_FILE}"
+      exit 1
+    fi
 
     echo "Cleaning up local backup file..."
     rm -f "/tmp/${BACKUP_FILE}"
 
     echo "Backup completed successfully at $(date)"
+
+    # Send success notification
+    send_discord_notification "true" "Backup completed successfully. File size: ${BACKUP_SIZE}" ""
 
   gdrive_upload.py: |
     #!/usr/bin/env python3
@@ -109,6 +150,115 @@ data:
             import traceback
             traceback.print_exc()
             sys.exit(1)
+
+  discord_notify.py: |
+    #!/usr/bin/env python3
+    import os
+    import sys
+    import json
+    import requests
+    from datetime import datetime
+
+    def send_discord_notification(success, message, error_log_file, backup_file, start_time):
+        """Send notification to Discord webhook."""
+
+        webhook_url = os.environ.get('DISCORD_WEBHOOK_URL', '')
+        if not webhook_url:
+            print("Discord webhook URL not configured")
+            return
+
+        # Prepare embed color and title
+        if success == "true":
+            color = 0x00ff00  # Green
+            title = "✅ TeslaMate Backup Successful"
+        else:
+            color = 0xff0000  # Red
+            title = "❌ TeslaMate Backup Failed"
+
+        # Build embed fields
+        fields = [
+            {
+                "name": "Backup File",
+                "value": f"`{backup_file}`",
+                "inline": False
+            },
+            {
+                "name": "Timestamp",
+                "value": f"<t:{int(datetime.fromisoformat(start_time.replace('Z', '+00:00')).timestamp())}:F>",
+                "inline": False
+            }
+        ]
+
+        # Add message field
+        if message:
+            fields.append({
+                "name": "Details",
+                "value": message,
+                "inline": False
+            })
+
+        # If failed, include error logs
+        description = ""
+        if success != "true" and error_log_file and os.path.exists(error_log_file):
+            try:
+                with open(error_log_file, 'r') as f:
+                    log_content = f.read()
+                    # Get last 50 lines or 1800 characters (Discord field limit is 1024, embed description is 4096)
+                    log_lines = log_content.strip().split('\n')
+                    error_snippet = '\n'.join(log_lines[-50:])
+                    if len(error_snippet) > 1800:
+                        error_snippet = error_snippet[-1800:]
+
+                    description = f"```\n{error_snippet}\n```"
+            except Exception as e:
+                print(f"Failed to read error log: {e}")
+
+        # Prepare Discord embed
+        embed = {
+            "title": title,
+            "color": color,
+            "fields": fields,
+            "timestamp": start_time,
+            "footer": {
+                "text": "TeslaMate Database Backup"
+            }
+        }
+
+        if description:
+            embed["description"] = description
+
+        payload = {
+            "username": "TeslaMate Backup",
+            "embeds": [embed]
+        }
+
+        # Send to Discord
+        try:
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            response.raise_for_status()
+            print(f"Discord notification sent successfully (status: {response.status_code})")
+        except requests.exceptions.RequestException as e:
+            print(f"Failed to send Discord notification: {e}")
+            if hasattr(e.response, 'text'):
+                print(f"Response: {e.response.text}")
+
+    if __name__ == '__main__':
+        if len(sys.argv) != 6:
+            print("Usage: discord_notify.py <success> <message> <error_log_file> <backup_file> <start_time>")
+            sys.exit(1)
+
+        success = sys.argv[1]
+        message = sys.argv[2]
+        error_log_file = sys.argv[3]
+        backup_file = sys.argv[4]
+        start_time = sys.argv[5]
+
+        send_discord_notification(success, message, error_log_file, backup_file, start_time)
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -160,6 +310,10 @@ spec:
                   key: database_name
             - name: GDRIVE_FOLDER_ID
               value: {{ .Values.backup.googleDrive.folderId | quote }}
+            - name: WEBHOOK_ENABLED
+              value: {{ .Values.backup.webhook.enabled | quote }}
+            - name: DISCORD_WEBHOOK_URL
+              value: {{ .Values.backup.webhook.discordUrl | quote }}
             volumeMounts:
             - name: backup-script
               mountPath: /scripts

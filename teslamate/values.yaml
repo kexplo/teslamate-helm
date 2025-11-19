@@ -117,6 +117,13 @@ backup:
     # Name of the Kubernetes secret containing Google Drive credentials
     # The secret should contain a key 'credentials.json' with service account credentials
     credentialsSecretName: "teslamate-gdrive-credentials"
+  # Webhook notification configuration
+  webhook:
+    # Enable webhook notifications
+    enabled: false
+    # Discord webhook URL
+    # Get this from Discord: Server Settings > Integrations > Webhooks > New Webhook
+    discordUrl: ""
   # Resource limits for backup job
   resources: {}
     # limits:

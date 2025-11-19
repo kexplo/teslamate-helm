@@ -96,19 +96,41 @@ data:
     #!/usr/bin/env python3
     import os
     import sys
-    from google.oauth2 import service_account
+    import json
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
     def upload_to_drive(file_path, folder_id):
-        """Upload file to Google Drive."""
+        """Upload file to Google Drive using OAuth2 user credentials."""
 
-        # Load credentials from the mounted secret
-        SCOPES = ['https://www.googleapis.com/auth/drive.file']
-        credentials = service_account.Credentials.from_service_account_file(
-            '/secrets/gdrive/credentials.json',
-            scopes=SCOPES
+        # Load OAuth2 credentials from the mounted secret
+        token_path = '/secrets/gdrive/token.json'
+
+        # Load token file
+        with open(token_path, 'r') as token_file:
+            token_data = json.load(token_file)
+
+        # Create credentials from token data
+        credentials = Credentials(
+            token=token_data.get('token'),
+            refresh_token=token_data.get('refresh_token'),
+            token_uri=token_data.get('token_uri', 'https://oauth2.googleapis.com/token'),
+            client_id=token_data.get('client_id'),
+            client_secret=token_data.get('client_secret'),
+            scopes=token_data.get('scopes', ['https://www.googleapis.com/auth/drive.file'])
         )
+
+        # Refresh the token if expired
+        if credentials.expired and credentials.refresh_token:
+            print("Refreshing access token...")
+            credentials.refresh(Request())
+
+            # Update token file with new access token
+            token_data['token'] = credentials.token
+            with open(token_path, 'w') as token_file:
+                json.dump(token_data, token_file, indent=2)
 
         # Build the Drive API service
         service = build('drive', 'v3', credentials=credentials)

@@ -42,6 +42,7 @@ This chart supports automatic database backups to Google Drive using a CronJob.
      ```python
      #!/usr/bin/env python3
      import json
+     import sys
      from google_auth_oauthlib.flow import InstalledAppFlow
 
      SCOPES = ['https://www.googleapis.com/auth/drive.file']
@@ -53,8 +54,16 @@ This chart supports automatic database backups to Google Drive using a CronJob.
              SCOPES
          )
 
-         # Run local server for OAuth2 flow
-         creds = flow.run_local_server(port=0)
+         # Try to run local server first (for environments with a browser)
+         # If it fails, fall back to console-based authentication
+         try:
+             print("Attempting to open browser for authentication...")
+             creds = flow.run_local_server(port=0)
+         except Exception as e:
+             print(f"Browser authentication failed: {e}")
+             print("\nFalling back to manual authentication...")
+             print("Please visit the URL below in a browser on any device:\n")
+             creds = flow.run_console()
 
          # Save token
          token_data = {
@@ -69,15 +78,17 @@ This chart supports automatic database backups to Google Drive using a CronJob.
          with open('token.json', 'w') as token_file:
              json.dump(token_data, token_file, indent=2)
 
-         print('Token saved to token.json')
+         print('\n✓ Token saved to token.json')
 
      if __name__ == '__main__':
          main()
      ```
-   - Run the script and complete the OAuth2 authorization flow in your browser:
+   - Run the script and complete the OAuth2 authorization flow:
      ```bash
      python3 generate_token.py
      ```
+     - **With browser**: The script will automatically open a browser window for authentication
+     - **Without browser (headless)**: The script will display a URL. Copy the URL, open it in a browser on another device, complete the authentication, and paste the authorization code back into the terminal
    - This will create a `token.json` file with your OAuth2 credentials
 
 3. **Create Google Drive Folder**

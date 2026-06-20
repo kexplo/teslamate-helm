@@ -16,7 +16,8 @@ data:
     exec > >(tee -a "${LOG_FILE}") 2>&1
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-    BACKUP_FILE="teslamate_backup_${TIMESTAMP}.sql.gz"
+    # -Fc custom-format dump (already compressed); restore with pg_restore.
+    BACKUP_FILE="teslamate_backup_${TIMESTAMP}.dump"
     START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
     # Function to send Discord notification
@@ -41,7 +42,7 @@ data:
       exit 1
     fi
 
-    if ! apt-get install -y -qq postgresql-client gzip curl; then
+    if ! apt-get install -y -qq postgresql-client curl; then
       send_discord_notification "false" "Failed to install required packages" "${LOG_FILE}"
       exit 1
     fi
@@ -57,14 +58,8 @@ data:
     export PGDATABASE="${POSTGRES_DB}"
 
     echo "Creating database dump..."
-    if ! pg_dump -Fc -v -f "/tmp/${BACKUP_FILE%.gz}"; then
+    if ! pg_dump -Fc -v -f "/tmp/${BACKUP_FILE}"; then
       send_discord_notification "false" "PostgreSQL dump failed" "${LOG_FILE}"
-      exit 1
-    fi
-
-    echo "Compressing backup..."
-    if ! gzip "/tmp/${BACKUP_FILE%.gz}"; then
-      send_discord_notification "false" "Backup compression failed" "${LOG_FILE}"
       exit 1
     fi
 

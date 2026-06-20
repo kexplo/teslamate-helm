@@ -10,7 +10,7 @@ database_name: "teslamate"
 
 image:
   repository: teslamate/teslamate
-  tag: latest
+  tag: 4.0.1
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -56,8 +56,8 @@ postgres:
 grafana:
   image:
     repository: teslamate/grafana
-    tag: latest
-    pullPolicy: Always
+    tag: 4.0.1
+    pullPolicy: IfNotPresent
   podAnnotations: {}
   podLabels: {}
   podSecurityContext:

@@ -43,10 +43,18 @@ spec:
           httpGet:
             path: /health_check
             port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /health_check
             port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         env:
         - name: ENCRYPTION_KEY
           valueFrom:
